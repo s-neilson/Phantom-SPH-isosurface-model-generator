@@ -12,6 +12,7 @@ from dualContouring import determineVertices
 from dualContouring import createMeshDataLists
 
 from uvMapping import determineEquirectangularUvPositions
+from uvMapping import determineUvVertexColours
 from uvMapping import fillTexture
 
 
@@ -117,19 +118,12 @@ def createSphereMeshData(centre,radius,zDivisions,xyDivisions):
                         
             
 #Creates a grid of coordinates where the densities and density gradients will be sampled.
-def createSamplingGridPositions(cubeAxisCount,cubeSize):
-    outputGrid=[[[None for z in range(0,cubeAxisCount+1)] for y in range(0,cubeAxisCount+1)] for x in range(0,cubeAxisCount+1)]
-    
+def createSamplingGridPositions(cubeAxisCount,cubeSize): 
     cornerPosition=(float(cubeAxisCount)*cubeSize)/(2.0) #The grid is centred at the position 0,0,0.
     axesOrdinates=numpy.linspace((-1.0*cornerPosition),cornerPosition,cubeAxisCount+1)
     axesXarray,axesYarray,axesZarray=numpy.meshgrid(axesOrdinates,axesOrdinates,axesOrdinates,indexing="ij")
-    
-    #Loops over all grid cubes
-    for x in range(0,cubeAxisCount+1):
-        for y in range(0,cubeAxisCount+1):
-            for z in range(0,cubeAxisCount+1):
-                outputGrid[x][y][z]=numpy.array([axesXarray[x,y,z],axesYarray[x,y,z],axesZarray[x,y,z]])
-                
+    outputGrid=numpy.stack((axesXarray,axesYarray,axesZarray),axis=3) #This is a 3d array of vectors that describe the location of each point in the 3d grid.
+               
     return outputGrid
 
 
@@ -141,7 +135,8 @@ outputFilename="twoPlanet19Years"
 cubeAxisCount=100 #Number of cubes to split the area up in all three axes. Number of sample points in an axis is equal to this number plus 1.
 cubeSize=10.0 #Width of cube side length
 textureHeight=1000 #Does not correspond exactly to height in pixels.
-isosurfaceDensityThreshold=5.1e-10 #The isosurface represents this density. In units of solar masses/solar radii^3
+isosurfaceDensityLowThreshold=5.1e-10 #The isosurface represents this density. In units of solar masses/solar radii^3
+isosurfaceDensityHighThreshold=9.9e99
 #Below are the minimum and maximum velocities the textures will represent.
 vXYmin=-0.01
 vXYmax=0.01
@@ -152,6 +147,7 @@ vRmax=0.01
  
 loadedFile=h5py.File(inputFilename+".h5","r")
 particleMass=loadedFile["header"]["massoftype"][0] #The mass of each SPH particle.
+particleHFactor=loadedFile["header"]["hfact"][()] #The smoothing length factor for the SPH particles.
 particleCount=loadedFile["header"]["nparttot"][()] #The number of SPH particles.
 particleVelocities=numpy.array(loadedFile["particles"]["vxyz"])
 sinkPositions=loadedFile["sinks"]["xyz"]
@@ -161,15 +157,14 @@ particlePositions=numpy.array(loadedFile["particles"]["xyz"])
 particleTree=KDTree(particlePositions) #Stores particle positions in a kd tree so the neighbouring particles to a sampling location can be quickly found.
 
 
-
 print("Creating sampling grid.")
 samplingGridPositions=createSamplingGridPositions(cubeAxisCount,cubeSize)
 densities=interpolateGrid_density(samplingGridPositions,particleTree,particleMass,particleH,particlePositions)
 print("Finding grid-isosurface intersections.")
-edgeIntersections,edgeIntersectionNormals,edgeNeighbouringCubes,cubeEdgeIntersections=processEdgeIntersections(5.1e-10,True,densities,samplingGridPositions,cubeAxisCount,
+edgeIntersections,edgeIntersectionNormals,edgeNeighbouringCubes,cubeEdgeIntersections=processEdgeIntersections(isosurfaceDensityLowThreshold,isosurfaceDensityHighThreshold,densities,samplingGridPositions,cubeAxisCount,
                                                                                                                 particleTree,particleMass,particleH,particlePositions)
 print("Placing vertices.")
-cubeVertices=determineVertices(True,cubeEdgeIntersections,samplingGridPositions,cubeAxisCount,cubeSize,
+cubeVertices=determineVertices(cubeEdgeIntersections,samplingGridPositions,cubeAxisCount,cubeSize,
                                edgeIntersections,edgeIntersectionNormals,
                                particleTree,particleMass,particleH,particlePositions)
 
@@ -178,20 +173,19 @@ starMeshVertices,starMeshVertexNormals,starMeshFaces=createMeshDataLists(cubeAxi
 
 
 
-vXY=interpolateList_vNormalXY(starMeshVertices,starMeshVertexNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities)
-vR=interpolateList_vNormalR(starMeshVertices,starMeshVertexNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities)
+vXY=interpolateList_vNormalXY(starMeshVertices,starMeshVertexNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities,particleHFactor)
+vR=interpolateList_vNormalR(starMeshVertices,starMeshVertexNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities,particleHFactor)
 print("maximum minimum XY "+str(max(vXY))+" "+str(min(vXY)))
 print("maximum minimum R "+str(max(vR))+" "+str(min(vR)))
 
 
-print("Creating UV map for star.")
-starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0,starMeshFacesUv=determineEquirectangularUvPositions(numpy.array([0.0,0.0,0.0]),starMeshVertices,starMeshFaces,vXY,vXYmin,vXYmax)
-print("Creating surface texture.")
-fillTexture(starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0,starMeshFacesUv,textureHeight,outputFilename+"_vXY")
 
-print("Creating UV map for star.")
-starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0,starMeshFacesUv=determineEquirectangularUvPositions(numpy.array([0.0,0.0,0.0]),starMeshVertices,starMeshFaces,vR,vRmin,vRmax)
-print("Creating surface texture.")
+starMeshUvVertices,starMeshFacesUv=determineEquirectangularUvPositions(numpy.array([0.0,0.0,0.0]),starMeshVertices,starMeshFaces)
+print("Creating XY surface texture.")
+starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0=determineUvVertexColours(starMeshUvVertices,vXY,vXYmin,vXYmax)
+fillTexture(starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0,starMeshFacesUv,textureHeight,outputFilename+"_vXY")
+print("Creating R surface texture.")
+starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0=determineUvVertexColours(starMeshUvVertices,vR,vRmin,vRmax)
 fillTexture(starMeshUvR,starMeshUvG,starMeshUvB,starMeshUvZ0,starMeshFacesUv,textureHeight,outputFilename+"_vR")
 
 

@@ -25,7 +25,7 @@ def dW(h,rFroms,rTo):
 
 #Performs SPH interpolation for a value over positions in a list
 def interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleValues):
-    interpolatedValues=numpy.zeros(shape=(len(samplingPositions),1))
+    interpolatedValues=numpy.zeros(shape=(numpy.array(samplingPositions).shape[0],1))
 
     closestParticleIndices=particleTree.query(samplingPositions,1,return_distance=False) #The indices of the particles closest to each sampling point.
     closestParticleH=particleH[closestParticleIndices.squeeze()] #The smoothing lengths of the SPH particles closest to each sampling point.
@@ -51,28 +51,12 @@ def interpolatePositions(samplingPositions,particleTree,particleMass,particleH,p
 
 #Performs SPH interpolation for a value over a 3d grid of positions.
 def interpolateGridPositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleValues):
-    xSize=len(samplingPositions)
-    ySize=len(samplingPositions[0])
-    zSize=len(samplingPositions[0][0])
-    interpolatedValues=numpy.zeros(shape=(xSize,ySize,zSize,1))
-    flattenedSamplingPositions=[] #Holds a 1d array of the sampling positions that can be used in interpolatePositions.
-    
-    #The flattened sampling position array is created.
-    for x in range(0,xSize):
-        for y in range(0,ySize):
-            for z in range(0,zSize):
-                flattenedSamplingPositions.append(samplingPositions[x][y][z])
-    
+    numberOfSamples=numpy.prod(samplingPositions.shape[0:3])
+    flattenedSamplingPositions=samplingPositions.reshape((numberOfSamples,3),order="C") #Turns the 3d array of sample position vectors into a 1d array of sample position vectors.
+
     flattenedInterpolatedValues=interpolatePositions(flattenedSamplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleValues)
-    
-    #The flattened interpolated data is put into a multi dimensional numpy array.
-    current1dIndex=0 #The current position in the flattened array. The values are put back into a 3d array in the same order that they were flattened.
-    for x in range(0,xSize):
-        for y in range(0,ySize):
-            for z in range(0,zSize):
-                interpolatedValues[x,y,z,0]=flattenedInterpolatedValues[current1dIndex]
-                current1dIndex+=1
-          
+    interpolatedValues=flattenedInterpolatedValues.reshape(samplingPositions.shape[0:3]+(1,),order="C") #The interpolated values for each position are put into a 3d array with indices corresponding to the original sample positions in samplingPositions.
+     
     return interpolatedValues
                 
                 

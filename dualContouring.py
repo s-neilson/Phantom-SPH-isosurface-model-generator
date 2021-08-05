@@ -1,6 +1,22 @@
 import numpy
 from sphInterpolation import dW
 
+#Determines if the surface intersects the edge between the points v1 and v2 due to one side being below a threshold and the other over.
+#Returns 0 if no intersection, -1 if it is an intersection passing the low threshold and 1 if it is an intersection passing the high threshold.
+def intersectionOccursAtEdge(v1,v2,thresholdLow,thresholdHigh):
+    lowThresholdIntersection=((v1<thresholdLow)and(v2>thresholdLow))or((v1>thresholdLow)and(v2<thresholdLow)) #An intersection occurs if one side is below the threshold and the other over.
+    highThresholdIntersection=((v1<thresholdHigh)and(v2>thresholdHigh))or((v1>thresholdHigh)and(v2<thresholdHigh))
+    
+    #No intersection is detected when there is no intersection across either thresholds or when there is an intersection across both. When there
+    #is an intersection across both could mean that there is structure below the resolution of the grid, and as it can not be resolved it is ignored.
+    noIntersection=not(lowThresholdIntersection^highThresholdIntersection)
+    #print("ccd "+str(v1)+" cxd "+str(v2)+" lt "+str(thresholdLow)+" ht "+str(thresholdHigh)+" lti "+str(lowThresholdIntersection)+" hti "+str(highThresholdIntersection)+" ni "+str(noIntersection))
+    if(noIntersection):
+        return 0
+    elif(lowThresholdIntersection):
+        return -1
+    else: #When highThresholdIntersection is true.
+        return 1
 
 #Determines how far along an edge the surface intersects using linear interpolation.
 def determineEdgeIntersection(c1,c2,v1,v2,threshold,axis):
@@ -33,14 +49,15 @@ def determineNormalAtPoint(point,flipNormals,particleTree,particleMass,particleH
     dWvalues=dW(neighbouringParticleH,neighbouringParticlePositions,point) #An array of contributions to dW from all of the neighbouring SPH particles
     dWsum=numpy.sum(dWvalues,axis=0)
     gradient=dWsum*particleMass
+    #print(gradient)
     if(flipNormals):
-        gradient*=-1.0 #Normal direction can be flipped depending on whether the interior of the surface is higher or lower than the threshold value.
+        gradient*=-1.0 #Normals need to be flipped on low threshold intersections because the gradient points from low values to high values.
     
     return gradient/numpy.linalg.norm(gradient) #The gradient is normalized to give a normal vector.
     
 
 #Determines is the surface intersects the edges of cubes in the sampling grid, and puts the interpolated intersection points their surface normals into lists.    
-def processEdgeIntersections(threshold,flipNormals,densities,samplingGridPositions,cubeAxisCount,
+def processEdgeIntersections(lowThreshold,highThreshold,densities,samplingGridPositions,cubeAxisCount,
                              particleTree,particleMass,particleH,particlePositions):    
     
     #A list is created to hold the point along the edges of the grids where the surface intersects. Indexed by grid point location and then by one of three directions for the edge.
@@ -65,20 +82,23 @@ def processEdgeIntersections(threshold,flipNormals,densities,samplingGridPositio
                 
                 cornerXPosition=samplingGridPositions[x+1][y][z]
                 cornerXDensity=densities[x+1,y,z,:]
-                xAxisIntersection=((cornerCommonDensity>threshold)and(cornerXDensity<threshold))or((cornerCommonDensity<threshold)and(cornerXDensity>threshold))
-                #The surface intersects an edge if one corner is below the surface threshold and the other corner is above it.
+                xAxisIntersection=intersectionOccursAtEdge(cornerCommonDensity,cornerXDensity,lowThreshold,highThreshold)
                 
                 cornerYPosition=samplingGridPositions[x][y+1][z]
                 cornerYDensity=densities[x,y+1,z,:]
-                yAxisIntersection=((cornerCommonDensity>threshold)and(cornerYDensity<threshold))or((cornerCommonDensity<threshold)and(cornerYDensity>threshold))
+                yAxisIntersection=intersectionOccursAtEdge(cornerCommonDensity,cornerYDensity,lowThreshold,highThreshold)
                 
                 cornerZPosition=samplingGridPositions[x][y][z+1]
                 cornerZDensity=densities[x,y,z+1,:]
-                zAxisIntersection=((cornerCommonDensity>threshold)and(cornerZDensity<threshold))or((cornerCommonDensity<threshold)and(cornerZDensity>threshold))
+                zAxisIntersection=intersectionOccursAtEdge(cornerCommonDensity,cornerZDensity,lowThreshold,highThreshold)
 
                 #Intersections with the three edges attatched to the common corner are dealt with if necessary.
-                if(xAxisIntersection):
-                    edgeIntersections[x,y,z,0]=determineEdgeIntersection(cornerCommonPosition,cornerXPosition,cornerCommonDensity,cornerXDensity,threshold,"x")
+                if(xAxisIntersection!=0):
+                    #print("ccd2 "+str(cornerCommonDensity)+" cxd "+str(cornerXDensity)+" lt "+str(lowThreshold)+" ht "+str(highThreshold)+" xai "+str(xAxisIntersection))
+                    flipNormals=(xAxisIntersection==-1) #Done to make sure the face normals are the correct way around where low threshold intersections occur.
+                    intersectionThresholdValue=lowThreshold if(xAxisIntersection==-1) else highThreshold
+                    
+                    edgeIntersections[x,y,z,0]=determineEdgeIntersection(cornerCommonPosition,cornerXPosition,cornerCommonDensity,cornerXDensity,intersectionThresholdValue,"x")
                     edgeIntersectionNormals[x,y,z,0]=determineNormalAtPoint(edgeIntersections[x][y][z][0],flipNormals,particleTree,particleMass,particleH,particlePositions)
                     
                     #All the cubes that share this edge will be set to contain a vertex.
@@ -90,8 +110,11 @@ def processEdgeIntersections(threshold,flipNormals,densities,samplingGridPositio
                     #The neighboring cubes of this edge are set.
                     edgeNeighbouringCubes[x][y][z][0]=[[x,y,z],[x,y,max(0,z-1)],[x,max(0,y-1),z],[x,max(0,y-1),max(0,z-1)]]
                     
-                if(yAxisIntersection):
-                    edgeIntersections[x,y,z,1]=determineEdgeIntersection(cornerCommonPosition,cornerYPosition,cornerCommonDensity,cornerYDensity,threshold,"y")
+                if(yAxisIntersection!=0):
+                    flipNormals=(yAxisIntersection==-1)
+                    intersectionThresholdValue=lowThreshold if(yAxisIntersection==-1) else highThreshold
+                    
+                    edgeIntersections[x,y,z,1]=determineEdgeIntersection(cornerCommonPosition,cornerYPosition,cornerCommonDensity,cornerYDensity,intersectionThresholdValue,"y")
                     edgeIntersectionNormals[x,y,z,1]=determineNormalAtPoint(edgeIntersections[x][y][z][1],flipNormals,particleTree,particleMass,particleH,particlePositions)
                     
                     cubeEdgeIntersections[x][y][z].append([x,y,z,1])
@@ -101,8 +124,11 @@ def processEdgeIntersections(threshold,flipNormals,densities,samplingGridPositio
                     
                     edgeNeighbouringCubes[x][y][z][1]=[[x,y,z],[x,y,max(0,z-1)],[max(0,x-1),y,z],[max(0,x-1),y,max(0,z-1)]]
                     
-                if(zAxisIntersection):
-                    edgeIntersections[x,y,z,2]=determineEdgeIntersection(cornerCommonPosition,cornerZPosition,cornerCommonDensity,cornerZDensity,threshold,"z")
+                if(zAxisIntersection!=0):
+                    flipNormals=(zAxisIntersection==-1)
+                    intersectionThresholdValue=lowThreshold if(zAxisIntersection==-1) else highThreshold
+                    
+                    edgeIntersections[x,y,z,2]=determineEdgeIntersection(cornerCommonPosition,cornerZPosition,cornerCommonDensity,cornerZDensity,intersectionThresholdValue,"z")
                     edgeIntersectionNormals[x,y,z,2]=determineNormalAtPoint(edgeIntersections[x][y][z][2],flipNormals,particleTree,particleMass,particleH,particlePositions)
                     
                     cubeEdgeIntersections[x][y][z].append([x,y,z,2])
@@ -118,7 +144,7 @@ def processEdgeIntersections(threshold,flipNormals,densities,samplingGridPositio
 
 #Determines the optimal position for a vertex inside each grid cube with surface edge intersections. The normal of the vertex is
 #also obtained.
-def determineVertices(flipNormals,cubeEdgeIntersections,samplingGridPositions,cubeAxisCount,cubeSize,
+def determineVertices(cubeEdgeIntersections,samplingGridPositions,cubeAxisCount,cubeSize,
                       edgeIntersections,edgeIntersectionNormals,
                       particleTree,particleMass,particleH,particlePositions):
     
@@ -162,8 +188,12 @@ def determineVertices(flipNormals,cubeEdgeIntersections,samplingGridPositions,cu
 
                         currentVertexPosition-=(1.0/30.0)*totalGradient
                         
-                        
-                    currentVertexNormal=determineNormalAtPoint(currentVertexPosition,flipNormals,particleTree,particleMass,particleH,particlePositions)
+                     
+                    averageIntersectingEdgeNormals=numpy.average(intersectedEdgeNormals,axis=0) #This is the average direction of the intersecitng edge normals for this vertex.
+                    currentVertexNormal=determineNormalAtPoint(currentVertexPosition,False,particleTree,particleMass,particleH,particlePositions)
+                    if(numpy.dot(averageIntersectingEdgeNormals,currentVertexNormal)<0.0): #The vertex normal needs to be flipped if it is representing a surface bounding the low threshold value.
+                        currentVertexNormal*=-1.0 #The normal is flipped to align with the general direction of the surrounding edge intersection normals if they do not already align.
+                    
                     cubeVertices[x][y][z]=(vertexIndex,currentVertexPosition,currentVertexNormal)
                     vertexIndex+=1
                     
@@ -210,7 +240,7 @@ def createMeshDataLists(cubeAxisCount,edgeNeighbouringCubes,edgeIntersectionNorm
                         v2v3Distance=numpy.linalg.norm(vertex2[1]-vertex3[1])
                         
                         if(v1v4Distance<v2v3Distance):
-                            #From the outside, the vertex order for a face needs to be anti -lockwise for the face's normal to point outwards. By performing a cross
+                            #From the outside, the vertex order for a face needs to be anti-clockwise for the face's normal to point outwards. By performing a cross
                             #product on vertices 4-1 and 1-2 the orientation of the vertex sequence 1,4,2 can be obtained, and after seeing if the dot product of the 
                             #result and the surface normal is greater than zero, it can be determined if the vertex order needs to be changed to the opposite direction.
                             vertexOrderNormalDirection=numpy.dot(numpy.cross(vertex4[1]-vertex1[1],vertex2[1]-vertex1[1]),edgeIntersectionNormals[x,y,z,ed])>0.0

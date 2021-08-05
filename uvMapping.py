@@ -11,13 +11,33 @@ def determineVertexColour(vertexValue,valueMinimum,valueMaximum):
     vertexColourRgb=hsv_to_rgb([hue,1.0,1.0]) #RGB colour hue depends on vertexValue.
     return vertexColourRgb
 
+#Determines the colours of a set of UV vertices and outputs lists that can be used to interpolate the colours across UV triangles.
+def determineUvVertexColours(uvVertexData,vertexValues,valueMinimum,valueMaximum):
+    uvVertexColours=[determineVertexColour(vertexValues[currentUvVertexData[2],0],valueMinimum,valueMaximum) for currentUvVertexData in uvVertexData] #The colours of each vertex in the UV map. These colours will be interpolated over the UV map's triangles.
+    
+    uvVertexR=[] #The red, green and blue components of the UV vertices' colours.
+    uvVertexG=[]
+    uvVertexB=[]
+    uvVertexZ0=[] #Contains the coordinates of the UV vertex in 3d space if z=0.
+
+    for currentUvVertexData,currentUvVertexColour in zip(uvVertexData,uvVertexColours):
+        u,v=currentUvVertexData[0:2]
+        r,g,b=currentUvVertexColour
+        uvVertexR.append(numpy.array([u,v,r]))
+        uvVertexG.append(numpy.array([u,v,g]))
+        uvVertexB.append(numpy.array([u,v,b]))
+        uvVertexZ0.append(numpy.array([u,v,0.0]))
+        
+    return uvVertexR,uvVertexG,uvVertexB,uvVertexZ0
+    
+
 
 #Performs an equirectangular projection on a set of vertices and outputs a set of UV coordinates so a texture can be used.
-#It also returns the vertex colours for each of the vertex UV entries based on a supplied value for each vertex.
-def determineEquirectangularUvPositions(originPosition,vertexPositions,faces,vertexValues,valueMinimum,valueMaximum):
-    vertexAngularPositions=[] #A list of the angular coordinates of the vertices in the mesh.
+def determineEquirectangularUvPositions(originPosition,vertexPositions,faces):
+    print("Creating equirectangular projected UV map.")
+    uvVertexData=[] #For each UV vertex this contains its angular coordinates on the texture and the index of its corresponding model vertex.
 
-    for currentVertexPosition in vertexPositions:
+    for i,currentVertexPosition in enumerate(vertexPositions):
         r=numpy.linalg.norm(currentVertexPosition-originPosition) #Total distance to the vertex from the origin.
         phi=math.asin(currentVertexPosition[2]/r) #Vertical angle.
         theta=math.atan2(currentVertexPosition[0],(-1.0)*currentVertexPosition[1]) #Clockwise angle in XY plane from negative Y axis.
@@ -25,13 +45,11 @@ def determineEquirectangularUvPositions(originPosition,vertexPositions,faces,ver
         #Phi is set so 0 is the negative Z axis and pi is the positive Z axis. Theta is scaled from 0 to 2pi, with the 0 and 2pi position being the positive Y axis.
         phi+=((math.pi)/2.0)
         theta+=math.pi
-        vertexAngularPositions.append([theta,phi])
+        uvVertexData.append([theta,phi,i])
         
 
         
-     
-    vertexUvColours=[determineVertexColour(vertexValues[i,0],valueMinimum,valueMaximum) for i in range(0,vertexValues.shape[0])] #The colours of each vertex in the UV map. These colours will be interpolated over the triangles.
-    facesUvIndices=copy.deepcopy(faces) #A list that contains the UV entry indices for the faces. Is initally the same as the input face list.
+    facesUvIndices=copy.deepcopy(faces) #A list that contains the UV entry indices for the faces. It is initally the same as the input face list but will change if aditional UV vertices are needed.
     maximumThetaAngle=2.0*(math.pi) #The maxmimum theta angle taking the duplicated vertices into account. Is used to scale the horizintal UV coordinates.
     
     #Checks are done to determine the faces that have edges that cross the 0 and 2pi theta boundary. Duplicate UV vertex entries need to be made for them
@@ -54,60 +72,42 @@ def determineEquirectangularUvPositions(originPosition,vertexPositions,faces,ver
 
         
         if(v1cb):
-            currentAngularPosition=copy.deepcopy(vertexAngularPositions[vertex1Index])
-            currentAngularPosition[0]+=(2.0*(math.pi)) #The duplicate vertex theta angle has 2pi added to it, meaning it is on the right hand side of the texture.
-            maximumThetaAngle=max(maximumThetaAngle,currentAngularPosition[0]) #The maxmimum theta angle is updated if necessary.
-            vertexAngularPositions.append(currentAngularPosition)
+            currentUvVertexData=copy.deepcopy(uvVertexData[vertex1Index])
+            currentUvVertexData[0]+=(2.0*(math.pi)) #The duplicate vertex theta angle has 2pi added to it, meaning it is on the right hand side of the texture.
+            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0]) #The maxmimum theta angle is updated if necessary.
+            uvVertexData.append(currentUvVertexData)
             
-            currentUvEntryIndex=len(vertexAngularPositions) #Is the index of the previously duplicated vertex UV entry as it was the last one added.
+            currentUvEntryIndex=len(uvVertexData) #Is the index of the previously duplicated vertex UV entry as it was the last one added.
             currentFace[0]=currentUvEntryIndex #The index for the vertex that is responsible for an edge being over the boundary is updated.
             
-            currentVertexUvColour=vertexUvColours[vertex1Index] #The vertex colour for the original vertex is duplicated.
-            vertexUvColours.append(currentVertexUvColour)
             
         if(v2cb):
-            currentAngularPosition=copy.deepcopy(vertexAngularPositions[vertex2Index])
-            currentAngularPosition[0]+=(2.0*(math.pi))
-            maximumThetaAngle=max(maximumThetaAngle,currentAngularPosition[0])
-            vertexAngularPositions.append(currentAngularPosition)
+            currentUvVertexData=copy.deepcopy(uvVertexData[vertex2Index])
+            currentUvVertexData[0]+=(2.0*(math.pi))
+            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0])
+            uvVertexData.append(currentUvVertexData)
             
-            currentUvEntryIndex=len(vertexAngularPositions)
+            currentUvEntryIndex=len(uvVertexData)
             currentFace[1]=currentUvEntryIndex
             
-            currentVertexUvColour=vertexUvColours[vertex2Index]
-            vertexUvColours.append(currentVertexUvColour)
             
         if(v3cb):
-            currentAngularPosition=copy.deepcopy(vertexAngularPositions[vertex3Index])
-            currentAngularPosition[0]+=(2.0*(math.pi))
-            maximumThetaAngle=max(maximumThetaAngle,currentAngularPosition[0])
-            vertexAngularPositions.append(currentAngularPosition)
+            currentUvVertexData=copy.deepcopy(uvVertexData[vertex3Index])
+            currentUvVertexData[0]+=(2.0*(math.pi))
+            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0])
+            uvVertexData.append(currentUvVertexData)
             
-            currentUvEntryIndex=len(vertexAngularPositions)
+            currentUvEntryIndex=len(uvVertexData)
             currentFace[2]=currentUvEntryIndex
             
-            currentVertexUvColour=vertexUvColours[vertex3Index]
-            vertexUvColours.append(currentVertexUvColour)
-            
-      
-    #The outputed UV coordinates are scaled to between 0 and 1. UV vertex lists are given for all three colour channels and a forth one where the third coordinate is equal to zero.
-    vertexUvR=[]
-    vertexUvG=[]
-    vertexUvB=[]
-    vertexUvZ0=[]
+                 
+    #The angles are scaled between 0 and their maximum values to produce UV coordinates instead.
+    for currentUvVertexData in uvVertexData:
+        currentUvVertexData[0]/=maximumThetaAngle
+        currentUvVertexData[1]/=(math.pi)
     
-    for currentAngularPosition,currentVertexColour in zip(vertexAngularPositions,vertexUvColours):
-        u=currentAngularPosition[0]/maximumThetaAngle
-        v=currentAngularPosition[1]/(math.pi)
-        
-        vertexUvR.append(numpy.array([u,v,currentVertexColour[0]]))
-        vertexUvG.append(numpy.array([u,v,currentVertexColour[1]]))
-        vertexUvB.append(numpy.array([u,v,currentVertexColour[2]]))
-        vertexUvZ0.append(numpy.array([u,v,0.0]))
+    return uvVertexData,facesUvIndices
                
-    return vertexUvR,vertexUvG,vertexUvB,vertexUvZ0,facesUvIndices
-
-
 
     
 #Fills the pixels inside a triangle on a texture with colours interpolated from the triangle's vertices.

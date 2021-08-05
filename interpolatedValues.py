@@ -2,7 +2,10 @@ import numpy
 from sphInterpolation import interpolatePositions
 from sphInterpolation import interpolateGridPositions
 
-
+#Calculated the densities of PHANTOM SPH particles from their mass, smoothing length and smoothing length factor. Uses equation 6 in the
+#PHANTOM paper https://users.monash.edu/~dprice/pubs/preprints/phantom-accepted.pdf
+def calculateSphParticleDensities(particleMass,particleH,particleHFactor):
+    return numpy.expand_dims(particleMass*numpy.power(particleHFactor/particleH,3.0),axis=1)
 
 def interpolateGrid_density(samplingGridPositions,particleTree,particleMass,particleH,particlePositions):
     print("Interpolating density grid.")
@@ -11,9 +14,10 @@ def interpolateGrid_density(samplingGridPositions,particleTree,particleMass,part
 
 
 #The velocity projected on the unit vector perpendicular to the Z axis and the sampling position normal.
-def interpolateList_vNormalXY(samplingPositions,samplingPositionNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities):
+def interpolateList_vNormalXY(samplingPositions,samplingPositionNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities,particleHFactor):
     print("Interpolating normal-XY velocity.")
-    particleDensities=interpolatePositions(particlePositions,particleTree,particleMass,particleH,particlePositions,numpy.ones(shape=(particleH.shape[0],1)),numpy.ones(shape=particleH.shape))
+    #particleDensities=interpolatePositions(particlePositions,particleTree,particleMass,particleH,particlePositions,numpy.ones(shape=(particleH.shape[0],1)),numpy.ones(shape=particleH.shape))
+    particleDensities=calculateSphParticleDensities(particleMass,particleH,particleHFactor)
     vX=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,0])
     vY=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,1])
     vZ=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,2])
@@ -28,9 +32,10 @@ def interpolateList_vNormalXY(samplingPositions,samplingPositionNormals,particle
 
 
 #The velocity projected on the sampling point normal vector.
-def interpolateList_vNormalR(samplingPositions,samplingPositionNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities):
+def interpolateList_vNormalR(samplingPositions,samplingPositionNormals,particleTree,particleMass,particleH,particlePositions,particleVelocities,particleHFactor):
     print("Interpolating normal-R velocity.")
-    particleDensities=interpolatePositions(particlePositions,particleTree,particleMass,particleH,particlePositions,numpy.ones(shape=(particleH.shape[0],1)),numpy.ones(shape=particleH.shape))
+    #particleDensities=interpolatePositions(particlePositions,particleTree,particleMass,particleH,particlePositions,numpy.ones(shape=(particleH.shape[0],1)),numpy.ones(shape=particleH.shape))
+    particleDensities=calculateSphParticleDensities(particleMass,particleH,particleHFactor)
     vX=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,0])
     vY=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,1])
     vZ=interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleVelocities[:,2])
