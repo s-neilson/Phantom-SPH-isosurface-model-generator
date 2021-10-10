@@ -1,0 +1,38 @@
+ #All variables referring to physical values should use the system of units that the input .h5 file uses.
+ 
+ 
+ #The filename for the .h5 input file (without the file extension). Can be a globbing string in order to process multiple files at once.
+inputFilename: NewPlanet*
+ 
+ #The relative path to the folder where the input files are. The slashes need to be escaped with the "\" character.
+inputFileFolder: "\\NewPlanet folder\\input"
+
+ #All output files will have the same name as the input file (with a different extension) with the following string added to the start.
+outputFilenamePrefix: "isodensity_"
+
+ #The relative path to the folder where the resulting files will be saved. The slashes need to be escaped with the "\" character.
+outputFileFolder: "\\NewPlanet folder\\output"
+
+ #The number (an integer) of cubes to divide the sampling grid along each axis into. The number of sampling points along each axis is equal to this number plus one.
+ #The sampling grid positioned so it is symmetrical at position 0,0,0.
+cubeAxisCount: 50
+
+ #The physical size (float) that each side of the cubes would be in the .h5 file.
+cubeSize: 20.0
+
+ #The height of the velocity maps in pixels.
+textureHeight: 1000
+
+ #The low and high thresholds for the density isosurface. Values outside of this range will not be included in the isosurface's interior.
+isosurfaceDensityLowThreshold: 5.1e-10
+isosurfaceDensityHighThreshold: 9.9e+99
+
+ #The minimum and maximum velocities for the output XY rotational and radial velocity maps. Velocities outside this range will have their colours clipped to
+ #the ones corresponding to these minimum and maximum velocites.
+vXYmin: -0.01
+vXYmax: 0.01
+vRmin: -0.01
+vRmax: 0.01
+
+ #The number of processors to use in order to process multiple input files. Each input file will be allocated a processor. If the value is -1 then all processors will be used.
+ncpus: -1

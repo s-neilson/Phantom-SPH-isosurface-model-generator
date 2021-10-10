@@ -1,8 +1,9 @@
-import copy
 import math
 import numpy
 from matplotlib.colors import hsv_to_rgb
 import matplotlib.pyplot as plt
+
+from halfedge import pointInsideTriangle
 
 
 def determineVertexColour(vertexValue,valueMinimum,valueMaximum):
@@ -12,32 +13,20 @@ def determineVertexColour(vertexValue,valueMinimum,valueMaximum):
     return vertexColourRgb
 
 #Determines the colours of a set of UV vertices and outputs lists that can be used to interpolate the colours across UV triangles.
-def determineUvVertexColours(uvVertexData,vertexValues,valueMinimum,valueMaximum):
-    uvVertexColours=[determineVertexColour(vertexValues[currentUvVertexData[2],0],valueMinimum,valueMaximum) for currentUvVertexData in uvVertexData] #The colours of each vertex in the UV map. These colours will be interpolated over the UV map's triangles.
-    
-    uvVertexR=[] #The red, green and blue components of the UV vertices' colours.
-    uvVertexG=[]
-    uvVertexB=[]
-    uvVertexZ0=[] #Contains the coordinates of the UV vertex in 3d space if z=0.
-
-    for currentUvVertexData,currentUvVertexColour in zip(uvVertexData,uvVertexColours):
-        u,v=currentUvVertexData[0:2]
-        r,g,b=currentUvVertexColour
-        uvVertexR.append(numpy.array([u,v,r]))
-        uvVertexG.append(numpy.array([u,v,g]))
-        uvVertexB.append(numpy.array([u,v,b]))
-        uvVertexZ0.append(numpy.array([u,v,0.0]))
-        
-    return uvVertexR,uvVertexG,uvVertexB,uvVertexZ0
+def determineUvVertexColours(meshToMap,vertexValues,valueMinimum,valueMaximum):
+    for currentVertex,currentVertexValue in zip(meshToMap.vertices,vertexValues):
+        for currentUvVertex in currentVertex.uvVertices.values(): #Loops over each UV vertex associated with each real vertex.
+            r,g,b=determineVertexColour(currentVertexValue,valueMinimum,valueMaximum)
+            currentUvVertex.setColour(r,g,b)
     
 
 
 #Performs an equirectangular projection on a set of vertices and outputs a set of UV coordinates so a texture can be used.
-def determineEquirectangularUvPositions(originPosition,vertexPositions,faces):
-    print("Creating equirectangular projected UV map.")
-    uvVertexData=[] #For each UV vertex this contains its angular coordinates on the texture and the index of its corresponding model vertex.
+def determineEquirectangularUvPositions(originPosition,meshToMap):
+    for currentVertex in meshToMap.vertices:
+        currentVertexPosition=currentVertex.position
+        currentVertexFaces=currentVertex.getFaces()
 
-    for i,currentVertexPosition in enumerate(vertexPositions):
         r=numpy.linalg.norm(currentVertexPosition-originPosition) #Total distance to the vertex from the origin.
         phi=math.asin(currentVertexPosition[2]/r) #Vertical angle.
         theta=math.atan2(currentVertexPosition[0],(-1.0)*currentVertexPosition[1]) #Clockwise angle in XY plane from negative Y axis.
@@ -45,89 +34,63 @@ def determineEquirectangularUvPositions(originPosition,vertexPositions,faces):
         #Phi is set so 0 is the negative Z axis and pi is the positive Z axis. Theta is scaled from 0 to 2pi, with the 0 and 2pi position being the positive Y axis.
         phi+=((math.pi)/2.0)
         theta+=math.pi
-        uvVertexData.append([theta,phi,i])
+        meshToMap.addUvVertex(theta,phi,currentVertex,currentVertexFaces)
         
 
         
-    facesUvIndices=copy.deepcopy(faces) #A list that contains the UV entry indices for the faces. It is initally the same as the input face list but will change if aditional UV vertices are needed.
     maximumThetaAngle=2.0*(math.pi) #The maxmimum theta angle taking the duplicated vertices into account. Is used to scale the horizintal UV coordinates.
     
     #Checks are done to determine the faces that have edges that cross the 0 and 2pi theta boundary. Duplicate UV vertex entries need to be made for them
     #to prevent the faces from wrapping around to the opposite side of the texture.
-    for currentFace in facesUvIndices:
-        vertex1Index=currentFace[0]-1
-        vertex2Index=currentFace[1]-1
-        vertex3Index=currentFace[2]-1
-        vertex1x=vertexPositions[vertex1Index][0]
-        vertex2x=vertexPositions[vertex2Index][0]
-        vertex3x=vertexPositions[vertex3Index][0]
-        vertex1y=vertexPositions[vertex1Index][1]
-        vertex2y=vertexPositions[vertex2Index][1]
-        vertex3y=vertexPositions[vertex3Index][1]
+    vertexBoundaryCrossings={} #A dictionary with the vertices responsible for boundary crossings as keys and the effected faces as values. Also contains the phi and updated theta value for the duplicated UV vertices.
+    for currentFace in meshToMap.faces:
+        currentFaceVertices1=currentFace.getAllVertices()
+        currentFaceVertices2=[currentHalfedge.oppositeHalfedge.endVertex for currentHalfedge in currentFace.getAllHalfedges()]
         
-        #Checks if various edges for the current face have vertices across the positive y axis.
-        v1cb=(vertex1x<0.0) and (vertex1y>0.0) and (((vertex2x>=0.0) and (vertex2y>0.0)) or ((vertex3x>=0.0) and (vertex3y>0.0))) #Vertex 1 has crossed the boundary.
-        v2cb=(vertex2x<0.0) and (vertex2y>0.0) and (((vertex1x>=0.0) and (vertex1y>0.0)) or ((vertex3x>=0.0) and (vertex3y>0.0))) #Vertex 2 has crossed the boundary.
-        v3cb=(vertex3x<0.0) and (vertex3y>0.0) and (((vertex1x>=0.0) and (vertex1y>0.0)) or ((vertex2x>=0.0) and (vertex2y>0.0))) #Vertex 3 has crossed the boundary.
+        for v1,v2 in zip(currentFaceVertices1,currentFaceVertices2): #Loops over all edges of the face.
+            v1x,v1y=v1.position[0],v1.position[1]
+            v2x,v2y=v2.position[0],v2.position[1]
+            
+            #Checks which vertex (if any) has caused the edge to cross from negative x to positive x in the positive y half of the model.
+            v1cb=(v1x<0.0) and (v1y>0.0) and (v2x>=0.0) and (v2y>=0.0)
+            v2cb=(v2x<0.0) and (v2y>0.0) and (v1x>=0.0) and (v1y>=0.0)
+            
+            if(v1cb): #Notes that v1 is a boundary crossing vertex and assigns the current face as one that is affected.
+                if(v1 not in vertexBoundaryCrossings):
+                    v1Theta,v1Phi=list(v1.uvVertices.values())[0].position[0],list(v1.uvVertices.values())[0].position[1] #The theta value of the UV vertex already assigned to v1.
+                    v1Theta+=(2.0*(math.pi)) #The duplicate vertex theta angle has 2pi added to it, meaning it is on the right hand side of the texture.
+                    maximumThetaAngle=max(maximumThetaAngle,v1Theta) #The maxmimum theta angle is updated if necessary.
+                    vertexBoundaryCrossings[v1]=(v1Theta,v1Phi,[]) #An empty list is created for the current vertex if it has not been added as a key to the dictionary yet.
+                    
+                vertexBoundaryCrossings[v1][2].append(currentFace)
+                
+            if(v2cb):
+                if(v2 not in vertexBoundaryCrossings):
+                    v2Theta,v2Phi=list(v2.uvVertices.values())[0].position[0],list(v2.uvVertices.values())[0].position[1] 
+                    v2Theta+=(2.0*(math.pi))
+                    maximumThetaAngle=max(maximumThetaAngle,v2Theta)
+                    vertexBoundaryCrossings[v2]=(v2Theta,v2Phi,[])
+                    
+                vertexBoundaryCrossings[v2][2].append(currentFace)
 
         
-        if(v1cb):
-            currentUvVertexData=copy.deepcopy(uvVertexData[vertex1Index])
-            currentUvVertexData[0]+=(2.0*(math.pi)) #The duplicate vertex theta angle has 2pi added to it, meaning it is on the right hand side of the texture.
-            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0]) #The maxmimum theta angle is updated if necessary.
-            uvVertexData.append(currentUvVertexData)
-            
-            currentUvEntryIndex=len(uvVertexData) #Is the index of the previously duplicated vertex UV entry as it was the last one added.
-            currentFace[0]=currentUvEntryIndex #The index for the vertex that is responsible for an edge being over the boundary is updated.
-            
-            
-        if(v2cb):
-            currentUvVertexData=copy.deepcopy(uvVertexData[vertex2Index])
-            currentUvVertexData[0]+=(2.0*(math.pi))
-            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0])
-            uvVertexData.append(currentUvVertexData)
-            
-            currentUvEntryIndex=len(uvVertexData)
-            currentFace[1]=currentUvEntryIndex
-            
-            
-        if(v3cb):
-            currentUvVertexData=copy.deepcopy(uvVertexData[vertex3Index])
-            currentUvVertexData[0]+=(2.0*(math.pi))
-            maximumThetaAngle=max(maximumThetaAngle,currentUvVertexData[0])
-            uvVertexData.append(currentUvVertexData)
-            
-            currentUvEntryIndex=len(uvVertexData)
-            currentFace[2]=currentUvEntryIndex
+    #New UV vertices are created and assigned to the correct faces for the vertices that cross the boundary.
+    for currentVertex,(theta,phi,faces) in zip(vertexBoundaryCrossings.keys(),vertexBoundaryCrossings.values()):
+        meshToMap.addUvVertex(theta,phi,currentVertex,faces)
             
                  
     #The angles are scaled between 0 and their maximum values to produce UV coordinates instead.
-    for currentUvVertexData in uvVertexData:
-        currentUvVertexData[0]/=maximumThetaAngle
-        currentUvVertexData[1]/=(math.pi)
-    
-    return uvVertexData,facesUvIndices
-               
+    for currentUvVertex in meshToMap.uvVertices:
+        currentUvVertex.position[0]/=maximumThetaAngle
+        currentUvVertex.position[1]/=(math.pi)
+                  
 
     
 #Fills the pixels inside a triangle on a texture with colours interpolated from the triangle's vertices.
 def interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g,v3b,v3z0):
     textureWidth=texture.shape[1]
     textureHeight=texture.shape[0]
-    
-    #These are the 2d normal vectors for the edges of the UV map triangle (pointing outwards assuming that the vertices are ordered in an anti-clockwise order).
-    nE31=numpy.cross(numpy.subtract(v1z0,v3z0),[0.0,0.0,1.0])
-    nE31/=numpy.linalg.norm(nE31)
-    nE31=nE31.tolist()
-    nE23=numpy.cross(numpy.subtract(v3z0,v2z0),[0.0,0.0,1.0])
-    nE23/=numpy.linalg.norm(nE23)
-    nE23=nE23.tolist()
-    nE12=numpy.cross(numpy.subtract(v2z0,v1z0),[0.0,0.0,1.0])
-    nE12/=numpy.linalg.norm(nE12)
-    nE12=nE12.tolist()
-       
-    
-    
+
     #If the UV coordinates along with a colour are considered points in 3d space, planes (one for red, green and blue) can be fitted to the triangle's vertices in order to interpolate
     #the colour at any point inside the triangle. Below are the normal vectors for these planes.
     nR=numpy.cross(numpy.subtract(v1r,v2r),numpy.subtract(v3r,v2r))
@@ -141,7 +104,7 @@ def interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g
     nB=nB.tolist()
         
     
-    #A search is done within the bounidng box of the triangle for points that are inside the triangle.
+    #A search is done within the bounding box of the triangle for points that are inside the triangle.
     uMinimum=max(0,math.floor(min(v1z0[0],v2z0[0],v3z0[0])))
     uMaximum=min(textureWidth,math.floor(max(v1z0[0],v2z0[0],v3z0[0]))+1)
     vMinimum=max(0,math.floor(min(v1z0[1],v2z0[1],v3z0[1])))
@@ -149,73 +112,47 @@ def interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g
     
     for uI in range(uMinimum,uMaximum):
         for vI in range(vMinimum,vMaximum):
-            u=uI+0.5 #The centre of each pixel is evaluated.
+            u=uI+0.5 #The centre of each pixel in the bounding box is evaluated.
             v=vI+0.5
             
-            #The expressions below determine if the current pixel is inside a triangle edge by checking if the perpendicular distance to it is less than or equal to zero.
-            #The perpendicular distance is calculated by taking the dot product of the edge normal vector with the vector pointing from one of the edge's vertices to the current pixel's centre.
-            insideE31=((nE31[0]*(u-v1z0[0]))+(nE31[1]*(v-v1z0[1])))<=0.0
-            insideE23=((nE23[0]*(u-v3z0[0]))+(nE23[1]*(v-v3z0[1])))<=0.0
-            insideE12=((nE12[0]*(u-v2z0[0]))+(nE12[1]*(v-v2z0[1])))<=0.0
-
-            if(insideE31 and insideE23 and insideE12): #If the point is inside the triangle due to it being within all three edges.
-                interpolatedR_u=nR[0]*(u-v1r[0])
-                interpolatedR_v=nR[1]*(v-v1r[1])
-                interpolatedR=v1r[2]+(((-1.0)*(interpolatedR_u+interpolatedR_v))/nR[2]) #Uses the point normal equation of a plane to calculate the colour channel value.
+            if(pointInsideTriangle((v1z0[0],v1z0[1]),(v2z0[0],v2z0[1]),(v3z0[0],v3z0[1]),(u,v))):
+                interpolatedR_u=nR[0]*u
+                interpolatedR_v=nR[1]*v
+                interpolatedR=(numpy.dot(nR,v1r)-interpolatedR_u-interpolatedR_v)/nR[2] #Uses the point normal equation of a plane to calculate the colour channel value.
                 
-                interpolatedG_u=nG[0]*(u-v1g[0])
-                interpolatedG_v=nG[1]*(v-v1g[1])
-                interpolatedG=v1g[2]+(((-1.0)*(interpolatedG_u+interpolatedG_v))/nG[2])
+                interpolatedG_u=nG[0]*u
+                interpolatedG_v=nG[1]*v
+                interpolatedG=(numpy.dot(nG,v1g)-interpolatedG_u-interpolatedG_v)/nG[2]
                 
-                interpolatedB_u=nB[0]*(u-v1b[0])
-                interpolatedB_v=nB[1]*(v-v1b[1])
-                interpolatedB=v1b[2]+(((-1.0)*(interpolatedB_u+interpolatedB_v))/nB[2])
+                interpolatedB_u=nB[0]*u
+                interpolatedB_v=nB[1]*v
+                interpolatedB=(numpy.dot(nB,v1b)-interpolatedB_u-interpolatedB_v)/nB[2]
 
-                #The colour of the current pixel in the texture is set.
-                texture[vI,uI,:]=[interpolatedR,interpolatedG,interpolatedB]
-
+                texture[vI,uI,:]=[interpolatedR,interpolatedG,interpolatedB] #The colour of the current pixel in the texture is set.
             
-    
-    
+                
+
+        
     
 #Creates a texture by filling each triangle of a UV map with colours interpolated from the triangle vertices.
-def fillTexture(vertexUvR,vertexUvG,vertexUvB,vertexUvZ0,triangles,textureHeight,textureName):
+def fillTexture(meshToMap,textureHeight,textureName):
     textureWidth=math.floor(2.25*textureHeight) #The texture width represents 360+45 (405) degrees while the height represents 180 degrees.
     texture=numpy.zeros(shape=(textureHeight,textureWidth,3))
     uvScalingFactor=numpy.array([textureWidth,textureHeight,1.0])
     
-    for currentTriangle in triangles: #Loops over all triangles.
-        vertex1Index=currentTriangle[0]-1
-        vertex2Index=currentTriangle[1]-1
-        vertex3Index=currentTriangle[2]-1
+    for currentTriangle in meshToMap.faces: #Loops over all triangles.
+        uv1,uv2,uv3=currentTriangle.getAllUvVertices()
         
-        v1r=vertexUvR[vertex1Index]*uvScalingFactor
-        v1g=vertexUvG[vertex1Index]*uvScalingFactor
-        v1b=vertexUvB[vertex1Index]*uvScalingFactor
-        v1z0=vertexUvZ0[vertex1Index]*uvScalingFactor
+        v1r,v1g,v1b,v1z0=uv1.r*uvScalingFactor,uv1.g*uvScalingFactor,uv1.b*uvScalingFactor,uv1.position*uvScalingFactor
+        v2r,v2g,v2b,v2z0=uv2.r*uvScalingFactor,uv2.g*uvScalingFactor,uv2.b*uvScalingFactor,uv2.position*uvScalingFactor
+        v3r,v3g,v3b,v3z0=uv3.r*uvScalingFactor,uv3.g*uvScalingFactor,uv3.b*uvScalingFactor,uv3.position*uvScalingFactor
         
-        v2r=vertexUvR[vertex2Index]*uvScalingFactor
-        v2g=vertexUvG[vertex2Index]*uvScalingFactor
-        v2b=vertexUvB[vertex2Index]*uvScalingFactor
-        v2z0=vertexUvZ0[vertex2Index]*uvScalingFactor
-        
-        v3r=vertexUvR[vertex3Index]*uvScalingFactor
-        v3g=vertexUvG[vertex3Index]*uvScalingFactor
-        v3b=vertexUvB[vertex3Index]*uvScalingFactor
-        v3z0=vertexUvZ0[vertex3Index]*uvScalingFactor
-        
-        interpolateTriangleColours(texture,v1r.tolist(),v1g.tolist(),v1b.tolist(),v1z0.tolist(),v2r.tolist(),v2g.tolist(),v2b.tolist(),v2z0.tolist(),v3r.tolist(),v3g.tolist(),v3b.tolist(),v3z0.tolist())
+        interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g,v3b,v3z0)
         
     textureFigure=plt.figure(figsize=(2.25,1.0),dpi=float(textureHeight))
     textureAxes=textureFigure.gca()
     textureAxes.set_axis_off()
     textureAxes.imshow(texture,origin="lower")
     textureFigure.savefig(textureName+".png",dpi="figure",bbox_inches="tight",pad_inches=0.0)
-
-    
-    
-    
-    
-    
     
     
