@@ -154,5 +154,6 @@ def fillTexture(meshToMap,textureHeight,textureName):
     textureAxes.set_axis_off()
     textureAxes.imshow(texture,origin="lower")
     textureFigure.savefig(textureName+".png",dpi="figure",bbox_inches="tight",pad_inches=0.0)
+    plt.close(textureFigure) #Closes the figure to free the memory associated with it.
     
     

@@ -114,10 +114,12 @@ def createSamplingGridPositions(cubeAxisCount,cubeSize):
 #Processes a single .h5 input file in order to create a isosurface model and textures.
 def oneIsosurfaceGeneration(configurationData):
     inputFilename=configurationData["inputFilename"]
-    inputFileFolder=os.getcwd()+configurationData["inputFileFolder"]+"\\"
+    inputFolder=configurationData["inputFolder"]
     
     outputFilenamePrefix=configurationData["outputFilenamePrefix"]
-    outputFileFolder=os.getcwd()+configurationData["outputFileFolder"]+"\\"
+    outputFolder=configurationData["outputFolder"]
+    outputMxyFolder=configurationData["outputMxyFolder"]
+    outputMrFolder=configurationData["outputMrFolder"]
     
     cubeAxisCount=configurationData["cubeAxisCount"] #Number of cubes to split the area up in all three axes. Number of sample points in an axis is equal to this number plus 1.
     cubeSize=configurationData["cubeSize"] #Width of cube side length
@@ -140,7 +142,7 @@ def oneIsosurfaceGeneration(configurationData):
 
 
  
-    loadedFile=h5py.File(inputFileFolder+inputFilename+".h5","r")
+    loadedFile=h5py.File(os.path.join(inputFolder,inputFilename+".h5"),"r")
     particleMass=loadedFile["header"]["massoftype"][0] #The mass of each SPH particle.
     particleHFactor=loadedFile["header"]["hfact"][()] #The smoothing length factor for the SPH particles.
     particleVelocities=numpy.array(loadedFile["particles"]["vxyz"])
@@ -185,20 +187,25 @@ def oneIsosurfaceGeneration(configurationData):
     vR=interpolateList_vNormalR([cv.position for cv in interpolatedMesh.vertices],[cv.normal for cv in interpolatedMesh.vertices],particleTree,particleMass,particleH,particlePositions,particleVelocities,particleHFactor)
     printWithInputName("  maximum minimum XY "+str(max(vXY))+" "+str(min(vXY)))
     printWithInputName("  maximum minimum R "+str(max(vR))+" "+str(min(vR)))
+    
 
     printWithInputName("Creating equirectangular projected UV map.")
     determineEquirectangularUvPositions(numpy.array([0.0,0.0,0.0]),interpolatedMesh)
     printWithInputName("Creating XY surface texture.")
     XYtextureFilename=outputFilenamePrefix+inputFilename+"_vXY"
+    XYtexturePath=os.path.join(outputFolder,XYtextureFilename)
+    XYmtlPath=os.path.join(outputMxyFolder,outputFilenamePrefix+inputFilename)
     determineUvVertexColours(interpolatedMesh,vXY,vXYmin,vXYmax)
-    fillTexture(interpolatedMesh,textureHeight,outputFileFolder+XYtextureFilename)
-    writeMaterialFile(outputFileFolder+"vXY_"+outputFilenamePrefix+inputFilename,XYtextureFilename)
+    fillTexture(interpolatedMesh,textureHeight,XYtexturePath)
+    writeMaterialFile(XYmtlPath,XYtexturePath)
     
     printWithInputName("Creating R surface texture.")
     RtextureFilename=outputFilenamePrefix+inputFilename+"_vR"
+    RtexturePath=os.path.join(outputFolder,RtextureFilename)
+    RmtlPath=os.path.join(outputMrFolder,outputFilenamePrefix+inputFilename)
     determineUvVertexColours(interpolatedMesh,vR,vRmin,vRmax)
-    fillTexture(interpolatedMesh,textureHeight,outputFileFolder+RtextureFilename)
-    writeMaterialFile(outputFileFolder+"vR_"+outputFilenamePrefix+inputFilename,RtextureFilename)
+    fillTexture(interpolatedMesh,textureHeight,RtexturePath)
+    writeMaterialFile(RmtlPath,RtexturePath)
 
 
     printWithInputName("Creating sink particle meshes.")
@@ -209,7 +216,8 @@ def oneIsosurfaceGeneration(configurationData):
         outputMeshes.append(currentMesh)
 
     printWithInputName("Writing to .obj file.")
-    writeMeshesToObjFile(outputFileFolder+outputFilenamePrefix+inputFilename,outputMeshes)
+    objFilePath=os.path.join(outputFolder,outputFilenamePrefix+inputFilename)
+    writeMeshesToObjFile(objFilePath,outputMeshes)
     
     
     
@@ -217,22 +225,36 @@ def main():
     configurationFile=open("configuration.yaml",mode="r")
     configurationData=list(yaml.safe_load_all(configurationFile))[0]
     
-    #Gets all the .h5 file filenames in the input file folder that match the globbing string in the configuration file.
+    #Gets the true folder paths from the configuration file, taking into account if they are relative or not.
     originalWorkingFolder=os.getcwd()
-    os.chdir(originalWorkingFolder+configurationData["inputFileFolder"]) #The working directory is changed to the input file folder that is specified in the configuration file.
+    configuredInputFolder,configuredOutputFolder,configuredOutputMxyFolder,configuredOutputMrFolder=configurationData["inputFolder"],configurationData["outputFolder"],configurationData["outputMxyFolder"],configurationData["outputMrFolder"]
+    trueInputFolder=configuredInputFolder if(os.path.isabs(configuredInputFolder)) else os.path.join(originalWorkingFolder,configuredInputFolder)
+    trueOutputFolder=configuredOutputFolder if(os.path.isabs(configuredOutputFolder)) else os.path.join(originalWorkingFolder,configuredOutputFolder)
+    trueOutputMxyFolder=configuredOutputMxyFolder if(os.path.isabs(configuredOutputMxyFolder)) else os.path.join(originalWorkingFolder,configuredOutputMxyFolder)
+    trueOutputMrFolder=configuredOutputMrFolder if(os.path.isabs(configuredOutputMrFolder)) else os.path.join(originalWorkingFolder,configuredOutputMrFolder)
+    
+    #Gets all the .h5 file filenames in the input file folder that match the globbing string in the configuration file.
+    os.chdir(trueInputFolder) #The working directory is changed to the input file folder that is specified in the configuration file.
     inputGlobbingString=configurationData["inputFilename"]+".h5"
     inputFilenames=glob.glob(inputGlobbingString)
     os.chdir(originalWorkingFolder) #The current working directory is reset.
     
-    #Creates the output folder if it doesn't already exist.
-    outputFileFolder=os.getcwd()+configurationData["outputFileFolder"]
-    if(os.path.isdir(outputFileFolder)==False):
-        os.mkdir(outputFileFolder)
+    #Creates the output folders if they doesn't already exist.
+    if(os.path.isdir(trueOutputFolder)==False):
+        os.makedirs(trueOutputFolder)
+    if(os.path.isdir(trueOutputMxyFolder)==False):
+        os.makedirs(trueOutputMxyFolder)
+    if(os.path.isdir(trueOutputMrFolder)==False):
+        os.makedirs(trueOutputMrFolder)
             
-    #Below a copy of configurationData is created for each of the input filenames.
+    #Below a copy of configurationData is created for each of the input filenames and the true versions of the folders.
     individualConfigurationData=[dict(configurationData) for i in enumerate(inputFilenames)]
     for currentConfigurationData,currentFilename in zip(individualConfigurationData,inputFilenames):
         currentConfigurationData["inputFilename"]=currentFilename[0:-3] #The .h5 extension is removed on the right-hand side.
+        currentConfigurationData["inputFolder"]=trueInputFolder
+        currentConfigurationData["outputFolder"]=trueOutputFolder
+        currentConfigurationData["outputMxyFolder"]=trueOutputMxyFolder
+        currentConfigurationData["outputMrFolder"]=trueOutputMrFolder
     
     #Multiple input files are processed in parallel if desired.
     Parallel(n_jobs=configurationData["ncpus"])(delayed(oneIsosurfaceGeneration)(ccd) for ccd in individualConfigurationData)

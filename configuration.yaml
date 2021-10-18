@@ -4,14 +4,18 @@
  #The filename for the .h5 input file (without the file extension). Can be a globbing string in order to process multiple files at once.
 inputFilename: NewPlanet*
  
- #The relative path to the folder where the input files are. The slashes need to be escaped with the "\" character.
-inputFileFolder: "\\NewPlanet folder\\input"
+ #The path (all paths in this file can be either relative or absolute) to the folder where the input files are. Backslahes need to be escaped with the "\" character.
+inputFolder: "NewPlanet folder\\input"
 
  #All output files will have the same name as the input file (with a different extension) with the following string added to the start.
 outputFilenamePrefix: "isodensity_"
 
- #The relative path to the folder where the resulting files will be saved. The slashes need to be escaped with the "\" character.
-outputFileFolder: "\\NewPlanet folder\\output"
+ #The path to the folder where the texture and .obj files will be saved. The slashes need to be escaped with the "\" character.
+outputFolder: "NewPlanet folder\\output"
+
+ #The paths to where the .mtl files will be stored for each of the XY and R surface velocity textures.
+outputMxyFolder: "NewPlanet folder\\output\\mXY"
+outputMrFolder: "NewPlanet folder\\output\\mR"
 
  #The number (an integer) of cubes to divide the sampling grid along each axis into. The number of sampling points along each axis is equal to this number plus one.
  #The sampling grid positioned so it is symmetrical at position 0,0,0.
