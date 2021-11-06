@@ -23,14 +23,21 @@ def dW(h,rFroms,rTo):
 
 
 
+#Gets the neighbouring SPH particles around a set of sampling positions.
+def getNeighbouringParticleIndices(samplingPositions,particleTree,particleH):
+    nearestSphParticleQueryResult=particleTree.query(samplingPositions,1,return_distance=True)
+    nearestSphParticleDistances,intersectionPointH=nearestSphParticleQueryResult[0].squeeze(),particleH[nearestSphParticleQueryResult[1].squeeze()] #The distance to and smoothing length of the closest SPH particle for each sampling position.
+
+    #Normally searches for SPH particles within twice the nearest SPH particle's smoothing length. This is changed to twice the distance to the nearest SPH particle if the sampled point is outside
+    sphParticleSearchRadii=2.0*numpy.maximum(nearestSphParticleDistances,intersectionPointH) #the smoothing length of the nearest SPH particle to make sure at least one SPH particle is returned from the search.    
+
+    neighbouringParticleIndices=particleTree.query_radius(samplingPositions,sphParticleSearchRadii) #The indices of all particles within a specific multiple of smoothing lengths for each sampling position.
+    return neighbouringParticleIndices
+
 #Performs SPH interpolation for a value over positions in a list
 def interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleValues):
-    interpolatedValues=numpy.zeros(shape=(numpy.array(samplingPositions).shape[0],1))
-
-    closestParticleIndices=particleTree.query(samplingPositions,1,return_distance=False) #The indices of the particles closest to each sampling point.
-    closestParticleH=particleH[closestParticleIndices.squeeze()] #The smoothing lengths of the SPH particles closest to each sampling point.
-    neighbouringParticleIndices=particleTree.query_radius(samplingPositions,2.0*closestParticleH) #For each sampling point, the neighbouring SPH particle indices within twice the nearest particle smoothing length.
-    
+    interpolatedValues=numpy.zeros(shape=(numpy.array(samplingPositions).shape[0],1))  
+    neighbouringParticleIndices=getNeighbouringParticleIndices(samplingPositions,particleTree,particleH)
     
     for i in range(0,len(samplingPositions)): #Loops over all sampling positions.
         #The coordinates of the point to be sampled.

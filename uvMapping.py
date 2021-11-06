@@ -21,15 +21,16 @@ def determineUvVertexColours(meshToMap,vertexValues,valueMinimum,valueMaximum):
     
 
 
-#Performs an equirectangular projection on a set of vertices and outputs a set of UV coordinates so a texture can be used.
+#Performs an equirectangular projection on a set of vertices and outputs a set of UV coordinates so a texture can be used. Also returns the angular width of the map in radians.
 def determineEquirectangularUvPositions(originPosition,meshToMap):
     for currentVertex in meshToMap.vertices:
         currentVertexPosition=currentVertex.position
         currentVertexFaces=currentVertex.getFaces()
 
-        r=numpy.linalg.norm(currentVertexPosition-originPosition) #Total distance to the vertex from the origin.
-        phi=math.asin(currentVertexPosition[2]/r) #Vertical angle.
-        theta=math.atan2(currentVertexPosition[0],(-1.0)*currentVertexPosition[1]) #Clockwise angle in XY plane from negative Y axis.
+        r=currentVertexPosition-originPosition
+        rDistance=numpy.linalg.norm(r) #Total distance to the vertex from the origin.
+        phi=math.asin(r[2]/rDistance) #Vertical angle.
+        theta=math.atan2(r[0],(-1.0)*r[1]) #Clockwise angle in XY plane from negative Y axis.
             
         #Phi is set so 0 is the negative Z axis and pi is the positive Z axis. Theta is scaled from 0 to 2pi, with the 0 and 2pi position being the positive Y axis.
         phi+=((math.pi)/2.0)
@@ -52,8 +53,8 @@ def determineEquirectangularUvPositions(originPosition,meshToMap):
             v2x,v2y=v2.position[0],v2.position[1]
             
             #Checks which vertex (if any) has caused the edge to cross from negative x to positive x in the positive y half of the model.
-            v1cb=(v1x<0.0) and (v1y>0.0) and (v2x>=0.0) and (v2y>=0.0)
-            v2cb=(v2x<0.0) and (v2y>0.0) and (v1x>=0.0) and (v1y>=0.0)
+            v1cb=(v1x<originPosition[0]) and (v1y>originPosition[1]) and (v2x>=originPosition[0]) and (v2y>=originPosition[1])
+            v2cb=(v2x<originPosition[0]) and (v2y>originPosition[1]) and (v1x>=originPosition[0]) and (v1y>=originPosition[1])
             
             if(v1cb): #Notes that v1 is a boundary crossing vertex and assigns the current face as one that is affected.
                 if(v1 not in vertexBoundaryCrossings):
@@ -83,6 +84,8 @@ def determineEquirectangularUvPositions(originPosition,meshToMap):
     for currentUvVertex in meshToMap.uvVertices:
         currentUvVertex.position[0]/=maximumThetaAngle
         currentUvVertex.position[1]/=(math.pi)
+        
+    return maximumThetaAngle
                   
 
     
@@ -135,8 +138,7 @@ def interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g
         
     
 #Creates a texture by filling each triangle of a UV map with colours interpolated from the triangle vertices.
-def fillTexture(meshToMap,textureHeight,textureName):
-    textureWidth=math.floor(2.25*textureHeight) #The texture width represents 360+45 (405) degrees while the height represents 180 degrees.
+def fillTexture(meshToMap,textureWidth,textureHeight,textureName):
     texture=numpy.zeros(shape=(textureHeight,textureWidth,3))
     uvScalingFactor=numpy.array([textureWidth,textureHeight,1.0])
     
@@ -149,11 +151,6 @@ def fillTexture(meshToMap,textureHeight,textureName):
         
         interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g,v3b,v3z0)
         
-    textureFigure=plt.figure(figsize=(2.25,1.0),dpi=float(textureHeight))
-    textureAxes=textureFigure.gca()
-    textureAxes.set_axis_off()
-    textureAxes.imshow(texture,origin="lower")
-    textureFigure.savefig(textureName+".png",dpi="figure",bbox_inches="tight",pad_inches=0.0)
-    plt.close(textureFigure) #Closes the figure to free the memory associated with it.
+    plt.imsave(fname=textureName+".png",arr=texture,origin="lower",dpi=1.0)
     
     

@@ -2,7 +2,7 @@
 #and "Dual Marching Tetrahedra: Contouring in the Tetrahedronal Environment" (https://www.researchgate.net/publication/220845354_Dual_Marching_Tetrahedra_Contouring_in_the_Tetrahedronal_Environment).
 
 import numpy
-from sphInterpolation import dW
+from sphInterpolation import dW,getNeighbouringParticleIndices
 
 
 #Determines if the surface intersects the edge between the points v1 and v2 due to one side being below a threshold and the other over.
@@ -31,12 +31,11 @@ def determineEdgeIntersection(c1,c2,v1,v2,threshold):
    
 
 #Determines the normal vector of the density field at a particular point.
-def determineNormalAtPoint(point,flipNormals,particleTree,particleMass,particleH,particlePositions):
-    intersectionPointH=particleH[particleTree.query([point],1,return_distance=False).squeeze()] #The smoothing length of the closest SPH particle.
-    neighbouringParticleIndices=particleTree.query_radius([point],2.0*intersectionPointH)[0] #The indices of all particles within 2 times the chosen smoothing length.
+def determineNormalAtPoint(point,flipNormals,particleTree,particleMass,particleH,particlePositions):    
+    neighbouringParticleIndices=getNeighbouringParticleIndices(numpy.array([point]),particleTree,particleH)[0]
     neighbouringParticleH=particleH[neighbouringParticleIndices]
     neighbouringParticlePositions=particlePositions[neighbouringParticleIndices]
-    
+
     dWvalues=dW(neighbouringParticleH,neighbouringParticlePositions,point) #An array of contributions to dW from all of the neighbouring SPH particles
     dWsum=numpy.sum(dWvalues,axis=0)
     gradient=dWsum*particleMass

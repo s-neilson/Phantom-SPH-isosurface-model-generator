@@ -140,7 +140,6 @@ def oneIsosurfaceGeneration(configurationData):
         print("("+inputFilename+") "+stringToPrint)
         
 
-
  
     loadedFile=h5py.File(os.path.join(inputFolder,inputFilename+".h5"),"r")
     particleMass=loadedFile["header"]["massoftype"][0] #The mass of each SPH particle.
@@ -152,7 +151,6 @@ def oneIsosurfaceGeneration(configurationData):
     particlePositions=numpy.array(loadedFile["particles"]["xyz"])
     particleTree=KDTree(particlePositions) #Stores particle positions in a kd tree so the neighbouring particles to a sampling location can be quickly found.
     outputMeshes=[] #A list of meshes to write to a single .obj file.
-
 
     printWithInputName("Creating sampling grid.")
     samplingGridPositions=createSamplingGridPositions(cubeAxisCount,cubeSize)
@@ -190,13 +188,15 @@ def oneIsosurfaceGeneration(configurationData):
     
 
     printWithInputName("Creating equirectangular projected UV map.")
-    determineEquirectangularUvPositions(numpy.array([0.0,0.0,0.0]),interpolatedMesh)
+    textureAngularWidth=determineEquirectangularUvPositions(sinkPositions[0],interpolatedMesh) #The origin point for the equirectangular map projection is set to the star's core (sink mass 0).
+    textureWidth=math.floor((textureAngularWidth/(math.pi))*textureHeight) #The width of the equirectangular texture in pixels is set so that the angular width and angular height are equal to each other for each pixel.
+    
     printWithInputName("Creating XY surface texture.")
     XYtextureFilename=outputFilenamePrefix+inputFilename+"_vXY"
     XYtexturePath=os.path.join(outputFolder,XYtextureFilename)
     XYmtlPath=os.path.join(outputMxyFolder,outputFilenamePrefix+inputFilename)
     determineUvVertexColours(interpolatedMesh,vXY,vXYmin,vXYmax)
-    fillTexture(interpolatedMesh,textureHeight,XYtexturePath)
+    fillTexture(interpolatedMesh,textureWidth,textureHeight,XYtexturePath)
     writeMaterialFile(XYmtlPath,XYtexturePath)
     
     printWithInputName("Creating R surface texture.")
@@ -204,7 +204,7 @@ def oneIsosurfaceGeneration(configurationData):
     RtexturePath=os.path.join(outputFolder,RtextureFilename)
     RmtlPath=os.path.join(outputMrFolder,outputFilenamePrefix+inputFilename)
     determineUvVertexColours(interpolatedMesh,vR,vRmin,vRmax)
-    fillTexture(interpolatedMesh,textureHeight,RtexturePath)
+    fillTexture(interpolatedMesh,textureWidth,textureHeight,RtexturePath)
     writeMaterialFile(RmtlPath,RtexturePath)
 
 
