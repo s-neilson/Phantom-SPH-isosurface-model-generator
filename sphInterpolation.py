@@ -25,20 +25,22 @@ def dW(h,rFroms,rTo):
 
 #Gets the neighbouring SPH particles around a set of sampling positions.
 def getNeighbouringParticleIndices(samplingPositions,particleTree,particleH):
-    nearestSphParticleQueryResult=particleTree.query(samplingPositions,1,return_distance=True)
-    nearestSphParticleDistances,intersectionPointH=nearestSphParticleQueryResult[0].squeeze(),particleH[nearestSphParticleQueryResult[1].squeeze()] #The distance to and smoothing length of the closest SPH particle for each sampling position.
+    nearestSphParticleIndices=particleTree.query(samplingPositions,1,return_distance=False).squeeze(axis=1)
+    nearestSphParticleH=particleH[nearestSphParticleIndices] #The smoothing length of the closest SPH particle for each sampling position.
 
-    #Normally searches for SPH particles within twice the nearest SPH particle's smoothing length. This is changed to twice the distance to the nearest SPH particle if the sampled point is outside
-    sphParticleSearchRadii=2.0*numpy.maximum(nearestSphParticleDistances,intersectionPointH) #the smoothing length of the nearest SPH particle to make sure at least one SPH particle is returned from the search.    
+    neighbouringParticleIndices=particleTree.query_radius(samplingPositions,2.0*nearestSphParticleH) #The indices of all particles within two smoothing lengths for each sampling position.   
 
-    neighbouringParticleIndices=particleTree.query_radius(samplingPositions,sphParticleSearchRadii) #The indices of all particles within a specific multiple of smoothing lengths for each sampling position.
+    for i in range(0,len(samplingPositions)): #In some cases no neighbouring particles may be found within the search radius. In this loop such cases are assigned the particle closest to the sampling point.
+        if(len(neighbouringParticleIndices[i])==0):
+            neighbouringParticleIndices[i]=numpy.array([nearestSphParticleIndices[i]])
+
     return neighbouringParticleIndices
 
 #Performs SPH interpolation for a value over positions in a list
 def interpolatePositions(samplingPositions,particleTree,particleMass,particleH,particlePositions,particleDensities,particleValues):
     interpolatedValues=numpy.zeros(shape=(numpy.array(samplingPositions).shape[0],1))  
     neighbouringParticleIndices=getNeighbouringParticleIndices(samplingPositions,particleTree,particleH)
-    
+
     for i in range(0,len(samplingPositions)): #Loops over all sampling positions.
         #The coordinates of the point to be sampled.
         currentSamplingPosition=samplingPositions[i] #The coordinates of the point that will have a value interpolated.
