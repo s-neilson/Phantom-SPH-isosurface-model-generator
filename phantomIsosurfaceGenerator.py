@@ -1,4 +1,5 @@
 import glob
+from braceexpand import braceexpand
 import os
 import yaml
 import h5py
@@ -161,7 +162,7 @@ def oneIsosurfaceGeneration(configurationData):
     edgeIntersections,edgeIntersectionNormals,edgeNeighbouringTetrahedra,tetrahedronEdgeIntersections=processEdgeIntersections(isosurfaceDensityLowThreshold,isosurfaceDensityHighThreshold,
                                                                                                                                densities,samplingGridPositions,cubeAxisCount,
                                                                                                                                particleTree,particleMass,particleH,particlePositions)
-    
+
     printWithInputName("Placing vertices.")
     interpolatedMesh=Mesh("Isosurface ("+outputFilenamePrefix+inputFilename+")")
     tetrahedronVertices=determineVertices(tetrahedronEdgeIntersections,samplingGridPositions,cubeAxisCount,cubeSize,
@@ -176,7 +177,6 @@ def oneIsosurfaceGeneration(configurationData):
     interpolatedMesh.triangulateAllFaces()
     interpolatedMesh.mtlFilename,interpolatedMesh.materialName=outputFilenamePrefix+inputFilename+".mtl","IsosurfaceTexture" #The material for the isosurface model is set.
     outputMeshes.append(interpolatedMesh)
-
 
     printWithInputName("Determining velocities at mesh surface.")
     printWithInputName("Interpolating normal-XY velocity.")
@@ -233,10 +233,16 @@ def main():
     trueOutputMxyFolder=configuredOutputMxyFolder if(os.path.isabs(configuredOutputMxyFolder)) else os.path.join(originalWorkingFolder,configuredOutputMxyFolder)
     trueOutputMrFolder=configuredOutputMrFolder if(os.path.isabs(configuredOutputMrFolder)) else os.path.join(originalWorkingFolder,configuredOutputMrFolder)
     
-    #Gets all the .h5 file filenames in the input file folder that match the globbing string in the configuration file.
+    #Gets all the .h5 file filenames in the input file folder that match the globbing and brace expansion string in the configuration file.
     os.chdir(trueInputFolder) #The working directory is changed to the input file folder that is specified in the configuration file.
-    inputGlobbingString=configurationData["inputFilename"]+".h5"
-    inputFilenames=glob.glob(inputGlobbingString)
+    braceExpandedFilenames=list(braceexpand(configurationData["inputFilename"])) #The initial filename is brace expanded. Globbing will be performed on each of its results.
+    
+    inputFilenames=[] #A list to hold all possible filenames given by the globbing and brace expansion string.    
+    for currentBraceExpandedFilename in braceExpandedFilenames:  
+        currentBraceExpandedFilenameH5=currentBraceExpandedFilename+".h5"
+        currentFilenames=glob.glob(currentBraceExpandedFilenameH5)
+        inputFilenames+=currentFilenames
+
     os.chdir(originalWorkingFolder) #The current working directory is reset.
     
     #Creates the output folders if they doesn't already exist.
