@@ -1,7 +1,7 @@
  #All variables referring to physical values should use the system of units that the input .h5 file uses.
  
  
- #The filename for the .h5 input file (without the file extension). Can be a globbing string in order to process multiple files at once.
+ #The filename for the .h5 input file (without the file extension). Can be a globbing string with brace expansion in order to process multiple files at once.
 inputFilename: NewPlanet*
  
  #The path (all paths in this file can be either relative or absolute) to the folder where the input files are. Backslahes need to be escaped with the "\" character.
