@@ -1,3 +1,4 @@
+import sys
 import glob
 from braceexpand import braceexpand
 import os
@@ -222,7 +223,12 @@ def oneIsosurfaceGeneration(configurationData):
     
     
 def main():
-    configurationFile=open("configuration.yaml",mode="r")
+    configurationFilename="configuration.yaml"
+    if(len(sys.argv)>1):
+        configurationFilename=sys.argv[1]; #The first command line argument is used as the the configuration file's filename. If there is no command line argument then "configuration.yaml" is used as the configuration file's filename.
+    configurationFile=open(configurationFilename,mode="r")
+    print("Using the following configuration file: "+configurationFilename)
+
     configurationData=list(yaml.safe_load_all(configurationFile))[0]
     
     #Gets the true folder paths from the configuration file, taking into account if they are relative or not.
