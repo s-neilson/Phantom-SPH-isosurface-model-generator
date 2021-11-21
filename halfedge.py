@@ -382,9 +382,11 @@ class Mesh:
             edgeLength12=(((pv2X-pv1X)**2.0)+((pv2Y-pv1Y)**2.0))**0.5 #These are the two edge lengths.
             edgeLength23=(((pv3X-pv2X)**2.0)+((pv3Y-pv2Y)**2.0))**0.5   
             cornerCrossProduct=((pv2X-pv1X)*(pv3Y-pv2Y))-((pv2Y-pv1Y)*(pv3X-pv2X))
-            currentCrossProductAngle=math.asin(cornerCrossProduct/(edgeLength12*edgeLength23))
-            #The side at which an internal angle appears on a face is different on what way the face is oriented.
-            currentInternalAngle=math.pi+currentCrossProductAngle if(faceIsClockwise) else math.pi-currentCrossProductAngle
+            cornerDotProduct=((pv2X-pv1X)*(pv3X-pv2X))+((pv2Y-pv1Y)*(pv3Y-pv2Y))
+            
+            currentCornerAngle=math.acos(cornerDotProduct/(edgeLength12*edgeLength23)) #The angle between the current pair of edges using the definition of a dot product.
+            angleIsReflex=cornerCrossProduct>0.0 if(faceIsClockwise) else cornerCrossProduct<0.0 #The sign of the cross product changes depending on whether the edge vectors represent a reflex angle or not for the current face's winding order.
+            currentInternalAngle=(2.0*math.pi)-currentCornerAngle if(angleIsReflex) else currentCornerAngle
 
             if(currentInternalAngle>=math.pi):
                 continue #The corner is not convex, meaning that is cannot be an ear.
