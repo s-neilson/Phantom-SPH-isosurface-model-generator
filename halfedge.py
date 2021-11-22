@@ -373,6 +373,8 @@ class Mesh:
         #corner and aforementioned neighbouring vertices.
         splittingVertex1,splittingVertex2=None,None #The vertices identified as belonging to the sharpest ear.
         currentSmallestEarAngle=100.0
+        internalAngleSum=0.0
+
         for v1,v3,pv1,pv2,pv3 in zip(vertices1,vertices3,projectedVertices1,projectedVertices2,projectedVertices3):
             pv1X,pv1Y=pv1
             pv2X,pv2Y=pv2
@@ -382,11 +384,12 @@ class Mesh:
             edgeLength12=(((pv2X-pv1X)**2.0)+((pv2Y-pv1Y)**2.0))**0.5 #These are the two edge lengths.
             edgeLength23=(((pv3X-pv2X)**2.0)+((pv3Y-pv2Y)**2.0))**0.5   
             cornerCrossProduct=((pv2X-pv1X)*(pv3Y-pv2Y))-((pv2Y-pv1Y)*(pv3X-pv2X))
-            cornerDotProduct=((pv2X-pv1X)*(pv3X-pv2X))+((pv2Y-pv1Y)*(pv3Y-pv2Y))
-            
-            currentCornerAngle=math.acos(cornerDotProduct/(edgeLength12*edgeLength23)) #The angle between the current pair of edges using the definition of a dot product.
+            cornerDotProduct=((pv1X-pv2X)*(pv3X-pv2X))+((pv1Y-pv2Y)*(pv3Y-pv2Y))
+
+            currentCornerAngle=math.acos(max(min(cornerDotProduct/(edgeLength12*edgeLength23),1.0),-1.0)) #The angle between the current pair of edges using the definition of a dot product.
             angleIsReflex=cornerCrossProduct>0.0 if(faceIsClockwise) else cornerCrossProduct<0.0 #The sign of the cross product changes depending on whether the edge vectors represent a reflex angle or not for the current face's winding order.
             currentInternalAngle=(2.0*math.pi)-currentCornerAngle if(angleIsReflex) else currentCornerAngle
+            internalAngleSum+=currentInternalAngle
 
             if(currentInternalAngle>=math.pi):
                 continue #The corner is not convex, meaning that is cannot be an ear.
@@ -408,6 +411,9 @@ class Mesh:
                 splittingVertex1,splittingVertex2=v1,v3
                 currentSmallestEarAngle=currentInternalAngle
                 
+        if(internalAngleSum>(math.pi*(len(vertices1)-2))): #If the sum of internal angles is greater than usual, then this a self-intersecting polygon. It will be split using the first and third vertices in the face's vertex list.
+           splittingVertex1,splittingVertex2=vertices1[0],vertices1[2]
+               
         #Below the face is split and recursive calls are made to remove more ears. Only one of the recursive calls at most will do anything as at least one is a triangle.
         newFace=self.splitFace(faceToTriangulate,splittingVertex1,splittingVertex2)
         self.triangulateFace(faceToTriangulate)
