@@ -151,6 +151,6 @@ def fillTexture(meshToMap,textureWidth,textureHeight,textureName):
         
         interpolateTriangleColours(texture,v1r,v1g,v1b,v1z0,v2r,v2g,v2b,v2z0,v3r,v3g,v3b,v3z0)
         
-    plt.imsave(fname=textureName+".png",arr=texture,origin="lower",dpi=1.0)
+    plt.imsave(fname=textureName+".png",arr=texture,origin="lower",dpi=1000.0)
     
     
