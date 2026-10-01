@@ -189,8 +189,8 @@ def oneIsosurfaceGeneration(configurationData):
     
 
     printWithInputName("Creating equirectangular projected UV map.")
-    textureAngularWidth=determineEquirectangularUvPositions(sinkPositions[0],interpolatedMesh) #The origin point for the equirectangular map projection is set to the star's core (sink mass 0).
-    textureWidth=math.floor((textureAngularWidth/(math.pi))*textureHeight) #The width of the equirectangular texture in pixels is set so that the angular width and angular height are equal to each other for each pixel.
+    determineEquirectangularUvPositions(sinkPositions[0],interpolatedMesh) #The origin point for the equirectangular map projection is set to the star's core (sink mass 0).
+    textureWidth=2*textureHeight #The width of the equirectangular texture in pixels is set so that the angular width and angular height are equal to each other for each pixel.
     
     printWithInputName("Creating XY surface texture.")
     XYtextureFilename=outputFilenamePrefix+inputFilename+"_vXY"
