@@ -149,6 +149,12 @@ def oneIsosurfaceGeneration(configurationData):
     particleVelocities=numpy.array(loadedFile["particles"]["vxyz"])
     sinkPositions=loadedFile["sinks"]["xyz"]
 
+    sinkPositionText="XYZ coordinates of sink particles:\n"
+    sinkParticleCount=sinkPositions.shape[0]
+    for i in range(0,sinkParticleCount):
+        sinkPositionText+="  "+str(i)+": "+str(sinkPositions[i,:])+("" if(i==(sinkParticleCount-1)) else "\n")
+    printWithInputName(sinkPositionText)
+
     particleH=numpy.array(loadedFile["particles"]["h"])
     particlePositions=numpy.array(loadedFile["particles"]["xyz"])
     particleTree=KDTree(particlePositions) #Stores particle positions in a kd tree so the neighbouring particles to a sampling location can be quickly found.
@@ -210,7 +216,7 @@ def oneIsosurfaceGeneration(configurationData):
 
 
     printWithInputName("Creating sink particle meshes.")
-    for i in range(0,sinkPositions.shape[0]):
+    for i in range(0,sinkParticleCount):
         currentMesh=createSphereMeshData(sinkPositions[i,:],10.0,6,10,"Sink "+str(i))      
         currentMesh.mtlFilename=outputFilenamePrefix+inputFilename+".mtl"
         currentMesh.materialName="CoreColour" if (i==0) else "PlanetColour" #The first sink is the star's core, while the others are planets.
